@@ -5,22 +5,15 @@ import time
 
 
 class Node:
-    def __init__(self, s, parent, action, cost):
+    def __init__(self, s, parent, action, cost, h):
         self.s = s
         self.parent = parent
         self.action = action
         self.cost = cost
-        self.h = 0
+        self.h = h
 
-    def __hash__(self):
-        hashcode = self.s.__hash__()
-        hashcode += 7 * self.action
-
-    def __eq__(self, other):
-        if other is None:
-            return False
-
-        return self.s == other.s and self.action == other.action
+    def total_cost(self):
+        return self.cost + self.h
 
 
 class EightPuzzleSolver:
@@ -34,85 +27,71 @@ class EightPuzzleSolver:
         if self.verbose:
             print(msg)
 
-    @staticmethod
-    def c(node):
-        cost = 0
-
-        while node is not None:
-            cost += node.cost
-            node = node.parent
-
-        return cost
-
-    def h(self, node):
+    def h(self, s):
         # calculate the manhattan distance
-        self.print('\nCalculating h(n) for {}'.format(node))
+        self.print('\nCalculating h(n) for {}'.format(s))
 
         score = 0
 
         for i in range(self.num_cells):
             self.print('Puzzle Piece {}:'.format(i))
 
-            row = int(i / self.row_size)
-            col = i % self.row_size
-            self.print('\tgoal position is: {}, {}'.format(row, col))
+            goal_row = i // self.row_size
+            goal_col = i % self.row_size
+            self.print('\tgoal position is: {}, {}'.format(goal_row, goal_col))
 
-            pos = node.s.index(i)
-            curr_row = int(pos / self.row_size)
+            pos = s[i]
+            curr_row = pos // self.row_size
             curr_col = pos % self.row_size
             self.print('\tcurrently at: {}, {}'.format(curr_row, curr_col))
 
-            dy = abs(curr_row - row)
-            dx = abs(curr_col - col)
+            dy = abs(curr_row - goal_row)
+            dx = abs(curr_col - goal_col)
             distance = dx + dy
             self.print('\tdistance from goal: {} ({}, {})'.format(distance, dx, dy))
 
             score += distance
 
-        self.print('Heuristic for {}: {}\n'.format(node, score))
+        self.print('Heuristic for {}: {}\n'.format(s, score))
 
         return score
 
     def solve(self):
-        start_time = time.time()
-        root = Node(s=self.puzzle.reset(), action=None, parent=None, cost=0)
-        root.h = self.h(root)
+        """Solve the eight puzzle. Returns turns taken and the solution path as
+        a tuple.
+        """
+        init_state = self.puzzle.reset()
+        root = Node(s=init_state, action=None, parent=None, cost=0, h=self.h(init_state))
         open_set = list()
-        closed_set = list()
         open_set.append(root)
+        closed_set = list()
 
         while len(open_set) > 0:
-            best_score = 2 ** 31
-            i = -1
+            current = open_set[0]
 
             for node in open_set:
-                score = node.cost + node.h
-                if score < best_score:
-                    best_score = score
-                    i = open_set.index(node)
+                if node.total_cost() < current.total_cost():
+                    current = node
 
-            n = open_set.pop(i)
-            closed_set.append(n.s)
+            open_set.remove(current)
+            closed_set.append(current.s)
 
-            if self.puzzle.isgoal(n.s):
+            if self.puzzle.isgoal(current.s):
                 print('Solution found!')
-                print('Number of turns taken: {}'.format(n.cost))
-                elapsed_time = time.time() - start_time
-                print("Elapsed time: {:.2f} seconds".format(elapsed_time))
-                self.puzzle.show(a=self.action_list(n))
-                break
+                return current.cost, self.action_list(current)
 
-            for action in self.puzzle.actions(s=n.s):
-                next_state = self.puzzle.step(s=n.s, a=action)
-                child = Node(s=next_state, action=action, parent=n, cost=n.cost + 1)
+            for action in self.puzzle.actions(s=current.s):
+                next_state = self.puzzle.step(s=current.s, a=action)
+                child = Node(s=next_state, action=action, parent=current, cost=current.cost + 1, h=self.h(next_state))
 
                 if next_state in closed_set:
                     continue
 
                 if child not in open_set:
-                    child.h = self.h(child)
                     open_set.append(child)
 
+        print('Solution not found.')
+        return -1, []
 
     @staticmethod
     def action_list(node):
@@ -132,8 +111,14 @@ def main():
     args = parser.parse_args()
 
     puzzle = eightpuzzle(mode=args.mode)
-    solver = EightPuzzleSolver(puzzle, verbose=args.verbose)
-    solver.solve()
+    start_time = time.time()
+
+    turns, path = EightPuzzleSolver(puzzle, verbose=args.verbose).solve()
+
+    elapsed_time = time.time() - start_time
+    print("Elapsed time: {:.2f} seconds".format(elapsed_time))
+    print('Number of turns taken: {}'.format(turns))
+    puzzle.show(a=path)
 
 
 if __name__ == '__main__':
